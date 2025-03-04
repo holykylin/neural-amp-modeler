@@ -34,7 +34,7 @@ from ._core import InitializableFromConfig as _InitializableFromConfig
 
 logger = _logging.getLogger(__name__)
 
-_REQUIRED_CHANNELS = 1  # Mono
+_REQUIRED_CHANNELS = 2  # Stereo
 
 
 class Split(_Enum):
@@ -98,7 +98,7 @@ def wav_to_np(
     :param info: If `True`, also return the WAV info of this file.
     """
     x_wav = _wavio.read(str(filename))
-    assert x_wav.data.shape[1] == _REQUIRED_CHANNELS, "Mono"
+    assert x_wav.data.shape[1] == _REQUIRED_CHANNELS, "Stereo"
     if rate is not None and x_wav.rate != rate:
         raise RuntimeError(
             f"Explicitly expected sample rate of {rate}, but found {x_wav.rate} in "

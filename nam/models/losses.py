@@ -58,18 +58,26 @@ def multi_resolution_stft_loss(
     Experimental Multi Resolution Short Time Fourier Transform Loss using auraloss implementation.
     B: Batch size
     L: Sequence length
+    C: Number of channels (1 for mono, 2 for stereo)
 
-    :param preds: (B,L)
-    :param targets: (B,L)
-    :param loss_func: A pre-initialized instance of the loss function module. Providing
-        this saves time.
-    :param device: If provided, send the preds and targets to the provided device.
+    :param preds: (B,C,L) for stereo or (B,L) for mono
+    :param targets: (B,C,L) for stereo or (B,L) for mono
+    :param loss_func: A pre-initialized instance of the loss function module
+    :param device: If provided, send the preds and targets to the provided device
     :return: ()
     """
     loss_func = _MultiResolutionSTFTLoss() if loss_func is None else loss_func
     if device is not None:
         preds, targets = [z.to(device) for z in (preds, targets)]
-    return loss_func(preds, targets)
+    
+    # Handle both mono and stereo cases
+    if len(preds.shape) == 2:  # Mono
+        return loss_func(preds, targets)
+    else:  # Stereo
+        # Process each channel separately and average
+        loss_l = loss_func(preds[:, 0], targets[:, 0])
+        loss_r = loss_func(preds[:, 1], targets[:, 1])
+        return (loss_l + loss_r) / 2
 
 
 def mse_fft(preds: _torch.Tensor, targets: _torch.Tensor) -> _torch.Tensor:

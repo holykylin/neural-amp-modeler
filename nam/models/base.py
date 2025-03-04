@@ -183,6 +183,7 @@ def _get_torch_version() -> str:
 class BaseNet(_Base):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.register_buffer("_input_channels", _torch.tensor(2))  # 默认支持立体声
         self._mps_65536_fallback = False
 
     def forward(self, x: _torch.Tensor, pad_start: _Optional[bool] = None, **kwargs):
@@ -210,53 +211,28 @@ class BaseNet(_Base):
 
     def _forward_mps_safe(self, x: _torch.Tensor, **kwargs) -> _torch.Tensor:
         """
-        Wrap `._forward()` to protect against MPS-unsupported input lengths
-        beyond 65,536 samples.
-
-        Check this again when PyTorch 2.5.2 is released--hopefully it's fixed
-        then.
+        Forward pass with MPS safety checks
+        :param x: (N,C,L) for stereo or (N,L) for mono
         """
-        if not self._mps_65536_fallback:
-            try:
-                return self._forward(x, **kwargs)
-            except NotImplementedError as e:
-                if "Output channels > 65536 not supported at the MPS device." in str(e):
-                    msg = (
-                        "Warning: NAM encountered a bug in PyTorch's MPS backend and "
-                        "will switch to a fallback."
-                    )
-                    known_bad_versions = {"2.5.0", "2.5.1"}
-                    torch_version = _get_torch_version()
-                    if torch_version not in known_bad_versions:
-                        msg += (
-                            "\n"
-                            f"Your version of PyTorch is {torch_version}, which "
-                            "wasn't known to have this problem.\n"
-                            "Please open an Issue at:\n"
-                            "https://github.com/sdatkinson/neural-amp-modeler/issues/507"
-                            "\n"
-                            f"and report your PyTorch version ({torch_version}) "
-                            "so that we can keep track of versions of PyTorch that "
-                            "might be avoided."
-                        )
-                    print(msg)
-                    self._mps_65536_fallback = True
-                    return self._forward_mps_safe(x, **kwargs)
-                else:
-                    raise e
+        if x.shape[1] > 65536:  # MPS limitation
+            if len(x.shape) == 2:  # Mono
+                # Stitch together the output one piece at a time
+                stride = 65536 - (self.receptive_field - 1)
+                out_list = []
+                for i in range(0, x.shape[1], stride):
+                    j = min(i + 65536, x.shape[1])
+                    xi = x[:, i:j]
+                    out_list.append(self._forward(xi, **kwargs))
+                    if j == x.shape[1]:
+                        break
+                return _torch.cat(out_list, dim=1)
+            else:  # Stereo
+                # Process each channel separately
+                out_l = self._forward_mps_safe(x[:, 0:1], **kwargs)
+                out_r = self._forward_mps_safe(x[:, 1:2], **kwargs)
+                return _torch.cat([out_l, out_r], dim=1)
         else:
-            # Stitch together the output one piece at a time to avoid the MPS error
-            stride = 65_536 - (self.receptive_field - 1)
-            # We need to make sure that the last segment is big enough that we have the required history for the receptive field.
-            out_list = []
-            for i in range(0, x.shape[1], stride):
-                j = min(i + 65_536, x.shape[1])
-                xi = x[:, i:j]
-                out_list.append(self._forward(xi, **kwargs))
-                # Bit hacky, but correct.
-                if j == x.shape[1]:
-                    break
-            return _torch.cat(out_list, dim=1)
+            return self._forward(x, **kwargs)
 
     @_abc.abstractmethod
     def _forward(self, x: _torch.Tensor, **kwargs) -> _torch.Tensor:

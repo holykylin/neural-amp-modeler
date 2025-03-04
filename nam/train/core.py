@@ -1319,7 +1319,7 @@ def train(
     input_path: str,
     output_path: str,
     train_path: str,
-    input_version: _Optional[_Version] = None,  # Deprecate?
+    input_version: _Optional[_Version] = None,
     epochs=100,
     delay: _Optional[int] = None,
     latency: _Optional[int] = None,
@@ -1341,21 +1341,43 @@ def train(
     fast_dev_run: _Union[bool, int] = False,
 ) -> _Optional[TrainOutput]:
     """
-    :param lr_decay: =1-gamma for Exponential learning rate decay.
-    :param threshold_esr: Stop training if ESR is better than this. Ignore if `None`.
-    :param fast_dev_run: One-step training, used for tests.
+    Train a NAM model on audio data
+    :param input_path: Path to input audio file (mono or stereo)
+    :param output_path: Path to output audio file (mono or stereo)
+    :param train_path: Path to save the trained model
+    :param input_version: Version of input data format
+    :param epochs: Number of training epochs
+    :param delay: User-specified delay between input and output
+    :param latency: User-specified latency
+    :param model_type: Type of model to train
+    :param architecture: Model architecture
+    :param batch_size: Training batch size
+    :param ny: Number of output samples
+    :param lr: Learning rate
+    :param lr_decay: Learning rate decay
+    :param seed: Random seed
+    :param save_plot: Whether to save training plots
+    :param silent: Whether to suppress output
+    :param modelname: Name of the model
+    :param ignore_checks: Whether to ignore data validation checks
+    :param local: Whether to train locally
+    :param fit_mrstft: Whether to fit multi-resolution STFT loss
+    :param threshold_esr: Whether to use threshold-based early stopping
+    :param user_metadata: User metadata for the model
+    :param fast_dev_run: Whether to run in fast development mode
+    :return: Training output
     """
-
-    def parse_user_latency(
-        delay: _Optional[int], latency: _Optional[int]
-    ) -> _Optional[int]:
-        if delay is not None:
-            if latency is not None:
-                raise ValueError("Both delay and latency are provided; use latency!")
-            print("WARNING: use of `delay` is deprecated; use `latency` instead")
-            return delay
-        return latency
-
+    # 验证输入输出音频的声道数是否匹配
+    x_wav = _wavio.read(str(input_path))
+    y_wav = _wavio.read(str(output_path))
+    
+    if x_wav.data.shape[1] != y_wav.data.shape[1]:
+        raise ValueError(
+            f"Input and output audio must have the same number of channels. "
+            f"Input has {x_wav.data.shape[1]} channels, output has {y_wav.data.shape[1]} channels."
+        )
+    
+    # 其余代码保持不变
     if seed is not None:
         _torch.manual_seed(seed)
 
